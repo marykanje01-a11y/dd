@@ -89,7 +89,8 @@ const watchLocation = async (callback: (coords: { latitude: number; longitude: n
 };
 import { ref, update, onValue, off, remove, set } from 'firebase/database';
 import { clearDriverPresence } from '@/utils/driverPresence';
-import { Home, Mail, Clock, Settings } from 'lucide-react-native';
+import { Home, Mail, Clock, Settings, Phone } from 'lucide-react-native';
+import { useCall } from '@/context/CallContext';
 import ChatPanel from '@/components/ChatPanel';
 import InboxPanel from '@/components/InboxPanel';
 import ToastNotification from '@/components/ToastNotification';
@@ -134,8 +135,10 @@ export default function Dashboard() {
   }, [router]);
 
   // Active trip from Firestore orders (drives the live map polylines + markers)
-  const { tripStatus, workflowType, markers, activePolyline, showPolyline, arrivalTime } =
+  const { activeTrip, tripStatus, workflowType, markers, activePolyline, showPolyline, arrivalTime } =
     useActiveTrip(driverId);
+  const { callState, formattedTime, startCall } = useCall();
+  const canCallRider = !!activeTrip && ((workflowType === 'direct_trip' && ['accepted', 'arrived', 'started'].includes(tripStatus || '')) || (workflowType === 'store_delivery' && ['accepted', 'at_store', 'picked_up'].includes(tripStatus || '')));
 
   // Arrival card anchors at the coordinate matching the current trip phase:
   //   direct_trip accepted -> pickup, store_delivery accepted -> store,
@@ -730,6 +733,13 @@ if (activeTab === 'settings') {
         />
       </View>
 
+      {canCallRider && (
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Call rider" onPress={() => callState === 'idle' && activeTrip?.orderId && startCall(activeTrip.orderId)} style={[styles.callButton, callState === 'in-call' && styles.callButtonActive]}>
+          <Phone color={callState === 'in-call' ? '#fff' : '#172033'} size={25} />
+          {callState === 'in-call' && <Text style={styles.callTimer}>{formattedTime}</Text>}
+        </TouchableOpacity>
+      )}
+
       {/* DRAGGABLE SLIDING PANEL - Contains toggle inside */}
       <Animated.View
         style={[
@@ -876,6 +886,9 @@ const styles = StyleSheet.create({
   loadingContainer: { justifyContent: 'center', alignItems: 'center' },
 
   // Full screen map background
+  callButton: { position: 'absolute', right: 16, top: '40%', width: 56, height: 56, borderRadius: 28, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', zIndex: 5, elevation: 3, shadowColor: '#000', shadowOpacity: 0.18, shadowRadius: 5, shadowOffset: { width: 0, height: 2 } },
+  callButtonActive: { backgroundColor: '#16a34a' },
+  callTimer: { position: 'absolute', top: 58, color: '#16a34a', fontSize: 12, fontWeight: '700' },
   mapFullScreen: {
     position: 'absolute',
     top: 0,

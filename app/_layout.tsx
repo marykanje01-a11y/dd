@@ -9,6 +9,8 @@ import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { RegistrationProvider } from '@/context/RegistrationContext';
 import { TripRequestProvider } from '@/context/IncomingRidesContext';
 import GlobalTripRequestPanel from '@/components/GlobalTripRequestPanel';
+import CallOverlay from '@/components/CallOverlay';
+import { CallProvider } from '@/context/CallContext';
 import { auth, firestore } from '@/config/firebase';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
@@ -142,6 +144,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <RegistrationProvider>
         <TripRequestProvider>
+          <CallProvider>
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="index" />
             <Stack.Screen name="registration-terms" />
@@ -166,7 +169,9 @@ export default function RootLayout() {
           {isAuthenticated && verificationStatus === 'approved' && pathname === '/dashboard' && (
             <GlobalTripRequestPanel />
           )}
+          <CallOverlay />
           <StatusBar style="light" />
+          </CallProvider>
         </TripRequestProvider>
       </RegistrationProvider>
     </GestureHandlerRootView>

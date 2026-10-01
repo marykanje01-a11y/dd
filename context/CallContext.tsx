@@ -19,24 +19,44 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const player = useAudioPlayer(callSound); const [state, setState] = useState<State>('idle'); const [call, setCall] = useState<CallData>(null); const [elapsed, setElapsed] = useState(0); const [muted, setMuted] = useState(false); const [message, setMessage] = useState(''); const seenRef = useRef(false); const sessionCallRef = useRef<string | null>(null); const connectionRef = useRef<any>(null); const offsetRef = useRef(0);
   const audio = player as any;
   const ringRequestRef = useRef(0);
+  const pendingPlayRef = useRef<Promise<unknown> | null>(null);
   const stopRing = () => {
-    ringRequestRef.current += 1;
-    try {
-      audio.pause();
-      audio.seekTo(0);
-    } catch {}
+    const requestId = ++ringRequestRef.current;
+    const stopPlayback = () => {
+      if (requestId !== ringRequestRef.current) return;
+      try {
+        audio.pause();
+        audio.seekTo(0);
+      } catch {}
+    };
+
+    // Do not pause an HTML audio element while play() is still pending. Browsers
+    // reject that pending promise with AbortError and report it as a runtime error.
+    if (pendingPlayRef.current) {
+      pendingPlayRef.current.then(stopPlayback, stopPlayback);
+    } else {
+      stopPlayback();
+    }
   };
   const ring = () => {
     const requestId = ++ringRequestRef.current;
     try {
       audio.loop = true;
       const playRequest = audio.play();
-      if (playRequest && typeof playRequest.catch === 'function') {
-        playRequest.catch((error: unknown) => {
-          if (requestId !== ringRequestRef.current) return;
-          if (error instanceof DOMException && error.name === 'AbortError') return;
-          if (error instanceof Error && error.name === 'AbortError') return;
-        });
+      if (playRequest && typeof playRequest.then === 'function') {
+        const pendingPlay = Promise.resolve(playRequest);
+        pendingPlayRef.current = pendingPlay;
+        pendingPlay.then(
+          () => {
+            if (pendingPlayRef.current === pendingPlay) pendingPlayRef.current = null;
+            if (requestId !== ringRequestRef.current) stopRing();
+          },
+          (error: unknown) => {
+            if (pendingPlayRef.current === pendingPlay) pendingPlayRef.current = null;
+            // AbortError is expected when playback is interrupted by navigation or cleanup.
+            if (error instanceof Error && error.name !== 'AbortError') return;
+          },
+        );
       }
     } catch {}
   };

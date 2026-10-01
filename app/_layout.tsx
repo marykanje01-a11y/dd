@@ -2,8 +2,6 @@ import { useEffect, useState, useRef } from 'react';
 import { Stack, usePathname } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { View, StyleSheet } from 'react-native';
-import { useVideoPlayer, VideoView } from 'expo-video';
-import flashVideo from '@/assets/videos/flash.mp4';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useFrameworkReady } from '@/hooks/useFrameworkReady';
 import { RegistrationProvider } from '@/context/RegistrationContext';
@@ -16,12 +14,6 @@ import { onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 
 function SplashScreen({ onFinish }: { onFinish: () => void }) {
-  const player = useVideoPlayer(flashVideo, (videoPlayer) => {
-    videoPlayer.loop = false;
-    videoPlayer.muted = true;
-    videoPlayer.play();
-  });
-
   const onFinishRef = useRef(onFinish);
 
   useEffect(() => {
@@ -29,27 +21,14 @@ function SplashScreen({ onFinish }: { onFinish: () => void }) {
   }, [onFinish]);
 
   useEffect(() => {
-    // Start playback after the VideoView is mounted. This is required on web,
-    // where calling play from the player initializer can happen too early.
-    player.play();
-
     const splashTimer = setTimeout(() => {
       onFinishRef.current();
-    }, 15000);
+    }, 1500);
 
     return () => clearTimeout(splashTimer);
-  }, [player]);
+  }, []);
 
-  return (
-    <View style={splashStyles.container}>
-      <VideoView
-        player={player}
-        style={splashStyles.video}
-        contentFit="cover"
-        nativeControls={false}
-      />
-    </View>
-  );
+  return <View style={splashStyles.container} />;
 }
 
 const splashStyles = StyleSheet.create({

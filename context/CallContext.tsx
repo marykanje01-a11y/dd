@@ -18,9 +18,29 @@ const format = (s: number) => { const h = Math.floor(s / 3600); const m = Math.f
 export function CallProvider({ children }: { children: React.ReactNode }) {
   const player = useAudioPlayer(callSound); const [state, setState] = useState<State>('idle'); const [call, setCall] = useState<CallData>(null); const [elapsed, setElapsed] = useState(0); const [muted, setMuted] = useState(false); const [message, setMessage] = useState(''); const seenRef = useRef(false); const sessionCallRef = useRef<string | null>(null); const connectionRef = useRef<any>(null); const offsetRef = useRef(0);
   const audio = player as any;
-  const stopRing = () => { try { audio.pause(); audio.seekTo(0); } catch {} };
-  const ring = () => { try { audio.loop = true; audio.play(); } catch {} };
-  useEffect(() => { if (Platform.OS === 'web') { try { audio.play(); audio.pause(); audio.seekTo(0); } catch {} } }, [player]);
+  const ringRequestRef = useRef(0);
+  const stopRing = () => {
+    ringRequestRef.current += 1;
+    try {
+      audio.pause();
+      audio.seekTo(0);
+    } catch {}
+  };
+  const ring = () => {
+    const requestId = ++ringRequestRef.current;
+    try {
+      audio.loop = true;
+      const playRequest = audio.play();
+      if (playRequest && typeof playRequest.catch === 'function') {
+        playRequest.catch((error: unknown) => {
+          if (requestId !== ringRequestRef.current) return;
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          if (error instanceof Error && error.name === 'AbortError') return;
+        });
+      }
+    } catch {}
+  };
+  useEffect(() => () => stopRing(), [player]);
   useEffect(() => { const uid = auth.currentUser?.uid; if (!uid) return; const callRef = ref(database, `user_calls/${uid}`); const offsetRefDb = ref(database, '.info/serverTimeOffset'); const offTime = onValue(offsetRefDb, s => { offsetRef.current = s.val() || 0; }); const offCall = onValue(callRef, snapshot => { const data = snapshot.val() as CallData; if (!data) return; const now = Date.now() + offsetRef.current; if (!sessionCallRef.current && (terminal.has(data.status) || (data.expiresAt && data.expiresAt <= now))) return; if (data.status === 'ringing' && data.direction === 'incoming' && !['in-call','calling'].includes(state)) { sessionCallRef.current = data.callId; seenRef.current = true; setCall(data); setState('ringing'); ring(); } else if (data.status === 'active' && sessionCallRef.current === data.callId) { stopRing(); setCall(data); setState('in-call'); } else if (terminal.has(data.status) && sessionCallRef.current === data.callId && seenRef.current) { stopRing(); setMessage(data.status === 'declined' ? 'Call declined' : data.status === 'missed' ? 'No answer' : 'Call ended'); setState('ended'); setTimeout(() => { setState('idle'); setMessage(''); sessionCallRef.current = null; }, 2500); } }); return () => { off(callRef, 'value', offCall); off(offsetRefDb, 'value', offTime); }; }, [state]);
   useEffect(() => { if (state !== 'in-call' || !call?.startedAt) return; const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() + offsetRef.current - call.startedAt) / 1000))); tick(); const id = setInterval(tick, 1000); return () => clearInterval(id); }, [state, call?.startedAt]);
   const startCall = async (orderId: string) => { if (state !== 'idle') return; try { setState('calling'); const result = await callApiRequest('/api/calls/start', { orderId }); sessionCallRef.current = result.callId || null; seenRef.current = true; setCall({ ...result, peerName: 'Rider' }); connectionRef.current = await joinCallChannel({ appId: result.appId!, token: result.token, channel: result.channel!, uid: result.uid! }); } catch (e: any) { setState('ended'); setMessage(e.message); setTimeout(() => setState('idle'), 2500); } };
